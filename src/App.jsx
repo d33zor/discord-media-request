@@ -1,74 +1,73 @@
-import { useEffect, useState } from 'react';
+import { BrowserRouter, Navigate, Route, Routes, useNavigate } from 'react-router-dom';
 import './App.css';
-
-import axios from 'axios';
-import Player from './components/Player';
-import { IndexContext } from './contexts/IndexContext';
-import { QueueContext } from './contexts/QueueContext';
+import { Suspense, lazy, useEffect } from 'react';
 import { MantineProvider } from '@mantine/core';
+import MainPageSVG from './components/MainPageSVG';
+const PlayerPage = lazy(() => import('./pages/PlayerPage'));
+const MainPage = lazy(() => import('./pages/MainPage'));
+const GetStartedPage = lazy(() => import('./pages/GetStartedPage'));
+import bgImg from './assets/login_page_bg.png';
+import DevLogo from './components/DevLogo';
+import styled from 'styled-components';
+import { AnimatePresence } from 'framer-motion';
 
-function App() {
-  const [loading, setLoading] = useState(true);
-  const [messages, setMessages] = useState([]);
-  const [index, setIndex] = useState(0);
-  const [reversed, setReversed] = useState([]);
-  const [queueRef, setQueueRef] = useState(null);
-
-  const reqInstance = axios.create({
-    headers: {
-      Authorization: import.meta.env.VITE_AUTH_KEY,
-    },
-  });
-
-  const getMoreMessages = async (channelId) => {
-    const lastMessageId = messages[messages.length - 1]?.id;
-
-    if (lastMessageId) {
-      const response = await reqInstance.get(
-        `https://discord.com/api/v9/channels/${channelId}/messages?before=${lastMessageId}&limit=100`
-      );
-
-      if (response.data.length !== 0) {
-        setMessages((current) => [...current, ...response.data]);
-      } else {
-        setLoading(false);
-        let arr = [
-          ...messages.filter(
-            (message) =>
-              message.attachments.length > 0 ||
-              (message.embeds.length > 0 &&
-                !message.embeds[0].url.startsWith('https://vm.tiktok.com') &&
-                !message.embeds[0].url.startsWith('https://twitter.com/'))
-          ),
-        ];
-        arr.reverse();
-        setReversed(arr);
-      }
-    } else {
-      const response = await reqInstance.get(
-        `https://discord.com/api/v9/channels/${channelId}/messages?limit=100`
-      );
-
-      if (response.data.length !== 0) {
-        setMessages((current) => [...current, ...response.data]);
-      } else {
-        setLoading(false);
-        let arr = [...messages.filter((message) => message.embeds.length > 0)];
-        arr.reverse();
-        setReversed(arr);
-      }
-    }
-  };
+const SharedLayout = ({ children }) => {
+  const data = JSON.parse(localStorage.getItem('api_data'));
+  const navigate = useNavigate();
 
   useEffect(() => {
-    getMoreMessages('1109907837582315530');
-  }, [messages]);
+    if (data?.token && data?.channel) {
+      navigate('/queue');
+    }
+  }, []);
 
+  return (
+    <>
+      {!data && (
+        <Background $bgImg={bgImg}>
+          <AnimatePresence>
+            <MainWrapper>{children}</MainWrapper>
+          </AnimatePresence>
+          <SVGWrapper>
+            <MainPageSVG />
+          </SVGWrapper>
+
+          <LogoWrapper>
+            <a
+              href='https://d33zor.dev/'
+              style={{ display: 'flex' }}
+              target='_blank'
+              rel='noopener noreferrer'
+            >
+              <DevLogo />
+            </a>
+          </LogoWrapper>
+        </Background>
+      )}
+    </>
+  );
+};
+
+function App() {
   return (
     <MantineProvider
       withGlobalStyles
       withNormalizeCSS
       theme={{
+        components: {
+          Button: {
+            defaultProps: {
+              variant: 'gradient',
+              gradient: { from: 'indigo', to: 'cyan' },
+            },
+          },
+          ActionIcon: {
+            defaultProps: {
+              variant: 'gradient',
+              gradient: { from: 'indigo', to: 'cyan' },
+            },
+          },
+        },
         colorScheme: 'dark',
         colors: {
           dark: [
@@ -86,13 +85,67 @@ function App() {
         },
       }}
     >
-      <QueueContext.Provider value={{ queueRef, setQueueRef }}>
-        <IndexContext.Provider value={{ index, setIndex }}>
-          {!loading ? <Player messages={reversed} index={index} /> : <div>Loading...</div>}
-        </IndexContext.Provider>
-      </QueueContext.Provider>
+      <BrowserRouter>
+        <Suspense fallback={<SharedLayout />}>
+          <Routes>
+            <Route
+              path='/'
+              element={
+                <SharedLayout>
+                  <MainPage />
+                </SharedLayout>
+              }
+            />
+            <Route
+              path='/get-started'
+              element={
+                <SharedLayout>
+                  <GetStartedPage />
+                </SharedLayout>
+              }
+            />
+
+            <Route path='/queue' element={<PlayerPage />} />
+            <Route path='/*' element={<Navigate to='/' replace />} />
+          </Routes>
+        </Suspense>
+      </BrowserRouter>
     </MantineProvider>
   );
 }
 
 export default App;
+
+const Background = styled.div`
+  height: 100%;
+  background-image: linear-gradient(to right, rgb(15, 19, 26) 50%, rgba(15, 19, 26, 0.7)),
+    url(${({ $bgImg }) => $bgImg});
+  background-repeat: no-repeat;
+  background-size: cover;
+  background-position: 100%;
+  display: flex;
+`;
+
+const MainWrapper = styled.div`
+  height: 100%;
+  width: 50%;
+  display: flex;
+  justify-content: center;
+  flex-direction: column;
+  padding: 5rem;
+  gap: 3rem;
+`;
+
+const LogoWrapper = styled.div`
+  position: absolute;
+  right: 1rem;
+  bottom: 1rem;
+`;
+
+const SVGWrapper = styled.div`
+  height: 100%;
+  width: 50%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+`;

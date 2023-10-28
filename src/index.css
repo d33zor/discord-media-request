@@ -21,14 +21,7 @@ head,
 }
 body {
   margin: 0;
-  display: flex;
   place-items: center;
   min-width: 320px;
   min-height: 100%;
 }
-/* .rs-toggle-checked .rs-toggle-presentation {
-  background-color: var(--rs-violet-700);
-}
-.rs-toggle-checked .rs-toggle-presentation:hover {
-  background-color: var(--rs-violet-500);
-} */

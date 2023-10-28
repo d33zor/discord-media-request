@@ -1,7 +1,7 @@
 import { useCallback, useContext, useEffect, useRef } from 'react';
 import styled from 'styled-components';
-import { IndexContext } from '../contexts/IndexContext';
-import { QueueContext } from '../contexts/QueueContext';
+import { IndexContext } from '../../contexts/IndexContext';
+import { QueueContext } from '../../contexts/QueueContext';
 
 const NativePlayer = ({ url, autoplay, length }) => {
   const video = useRef();
@@ -9,24 +9,25 @@ const NativePlayer = ({ url, autoplay, length }) => {
   const { queueRef } = useContext(QueueContext);
 
   useEffect(() => {
-    video.current.volume = localStorage.getItem('volume') || 1;
-    video.current.muted = localStorage.getItem('volume_muted') === 'true' || false;
+    if (video?.current) {
+      video.current.volume = localStorage.getItem('volume') || 1;
+      video.current.muted = localStorage.getItem('volume_muted') === 'true' || false;
 
-    video.current.addEventListener('volumechange', () => {
-      localStorage.setItem('volume', video.current.volume);
-      localStorage.setItem('volume_muted', video.current.muted);
-    });
+      video.current.addEventListener('volumechange', () => {
+        localStorage.setItem('volume', video.current.volume);
+        localStorage.setItem('volume_muted', video.current.muted);
+      });
+    }
   }, [video]);
 
   const listener = useCallback(() => {
     setIndex((i) => {
       if (i !== length - 1) {
-        localStorage.setItem('video_index', i + 1);
-        queueRef?.current?.scrollToIndex({
-          index: i + 1,
-        });
+        queueRef?.current?.scrollToIndex({ index: i + 1 });
         return i + 1;
-      } else return i;
+      } else {
+        return i;
+      }
     });
   }, [setIndex]);
 

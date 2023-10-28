@@ -1,22 +1,22 @@
 import styled from 'styled-components';
 
-const YoutubePlayer = ({ url }) => {
+const TwitchPlayer = ({ url }) => {
   return (
     <Wrapper>
       <iframe
-        src={`${url}?autoplay=1`}
+        src={url.replace('&parent=meta.tag', `&parent=${location.hostname}&autoplay=true`)}
         width='100%'
         height='100%'
         allowFullScreen
         frameBorder={0}
-      ></iframe>
+        title='Player'
+      />
     </Wrapper>
   );
 };
 
-export default YoutubePlayer;
+export default TwitchPlayer;
+
 const Wrapper = styled.div`
-  width: 100%;
-  height: 90%;
-  position: relative;
+  flex: 1;
 `;

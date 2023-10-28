@@ -1,56 +1,75 @@
 /* eslint-disable react/prop-types */
-import { useContext, useEffect, useState } from 'react';
+import { lazy, useContext, useEffect, useRef, useState } from 'react';
 import styled from 'styled-components';
 import { IndexContext } from '../contexts/IndexContext';
-import StreamablePlayer from './StreamablePlayer';
-import TwitchPlayer from './TwitchPlayer';
-import TiktokPlayer from './TiktokPlayer';
-import YoutubePlayer from './YoutubePlayer';
-import NativePlayer from './NativePlayer';
-import { ActionIcon, Switch, Tooltip } from '@mantine/core';
-import {
-  IconHelpCircleFilled,
-  IconPlayerSkipBackFilled,
-  IconPlayerSkipForwardFilled,
-} from '@tabler/icons-react';
-import Queue from './Queue';
+import { NativePlayer, TwitchPlayer, StreamablePlayer, TiktokPlayer } from './Players';
+import { Modal, Button, ActionIcon } from '@mantine/core';
+import { IconLayoutSidebarRightCollapse } from '@tabler/icons-react';
+const Controls = lazy(() => import('./Controls'));
+const Queue = lazy(() => import('./Queue'));
 import { QueueContext } from '../contexts/QueueContext';
-import formatDate from '../utils/formatDate';
+import { useDisclosure } from '@mantine/hooks';
+import { useNavigate } from 'react-router-dom';
+import ReactPlayer from 'react-player';
+import { IconLayoutSidebarLeftCollapse } from '@tabler/icons-react';
+import ChannelForm from './ChannelForm';
 
 const Player = ({ messages }) => {
   const { index, setIndex } = useContext(IndexContext);
-  const attachments = messages[index].attachments;
-  const embeds = messages[index].embeds;
+  const attachments = messages[index]?.attachments;
+  const embeds = messages[index]?.embeds;
   const [autoplay, setAutoplay] = useState(
     localStorage.getItem('autoplay') === 'true' ? true : false
   );
   const { queueRef } = useContext(QueueContext);
+  const [opened, { open, close }] = useDisclosure(false);
+  const navigate = useNavigate();
+  const [queueVisible, setQueueVisible] = useState(true);
 
   useEffect(() => {
-    const localIndex = localStorage.getItem('video_index');
-    if (!localIndex) {
-      localStorage.setItem('video_index', index);
-    } else {
-      if (+localIndex > messages.length - 1 || +localIndex < 0) return;
-      setIndex(+localIndex);
-      queueRef?.current?.scrollToIndex({
-        index: +localIndex,
-      });
+    if (queueRef?.current) {
+      const localIndex = localStorage.getItem('video_index');
+      if (!localIndex) {
+        localStorage.setItem('video_index', index);
+      } else {
+        if (+localIndex > messages.length - 1 || +localIndex < 0) return;
+        setIndex(+localIndex);
+        queueRef?.current?.scrollToIndex({
+          index: +localIndex,
+        });
+      }
     }
   }, [queueRef]);
+
+  const leaveChannel = () => {
+    localStorage.removeItem('api_data');
+    localStorage.removeItem('video_index');
+    navigate('/');
+  };
+
+  const firstUpdate = useRef(true);
+
+  useEffect(() => {
+    if (firstUpdate.current) {
+      firstUpdate.current = false;
+      return;
+    }
+
+    localStorage.setItem('video_index', index);
+  }, [index]);
 
   const changeMedia = (direction) => {
     if (direction === 'forward') {
       setIndex((i) => {
-        localStorage.setItem('video_index', i + 1);
-        queueRef?.current?.scrollToIndex({
-          index: i + 1,
-        });
-        return i + 1;
+        if (i !== messages.length - 1) {
+          queueRef?.current?.scrollToIndex({
+            index: i + 1,
+          });
+          return i + 1;
+        } else return i;
       });
     } else {
       setIndex((i) => {
-        localStorage.setItem('video_index', i - 1);
         queueRef?.current?.scrollToIndex({
           index: i - 1,
         });
@@ -61,7 +80,30 @@ const Player = ({ messages }) => {
 
   return (
     <Wrapper>
-      <VideoContainer>
+      {/* modal */}
+      <Modal.Root opened={opened} onClose={close} centered>
+        <ModalContentWrapper>
+          <Modal.Overlay />
+          <Modal.Content>
+            <Modal.Header>
+              <Modal.Title>Change channel</Modal.Title>
+              <Modal.CloseButton variant='subtle' />
+            </Modal.Header>
+            <Modal.Body>
+              <LeaveChannelWrapper>
+                <ChannelForm />
+                <div>Leave this channel</div>
+                <Button onClick={leaveChannel} variant='filled' color='red'>
+                  Leave
+                </Button>
+              </LeaveChannelWrapper>
+            </Modal.Body>
+          </Modal.Content>
+        </ModalContentWrapper>
+      </Modal.Root>
+
+      {/* player */}
+      <VideoContainer $queueVisible={queueVisible}>
         {attachments.length > 0 && (
           <NativePlayer
             autoplay={autoplay}
@@ -71,7 +113,12 @@ const Player = ({ messages }) => {
           />
         )}
         {embeds.length > 0 &&
-          embeds[0].url.startsWith('https://cdn.discordapp.com/attachments/') && (
+          embeds[0]?.type === 'video' &&
+          embeds[0]?.provider?.name !== 'Streamable' &&
+          embeds[0]?.provider?.name !== 'TikTok' &&
+          embeds[0]?.provider?.name !== 'YouTube' &&
+          embeds[0]?.provider?.name !== 'Imgur' &&
+          embeds[0]?.provider?.name !== 'Twitch' && (
             <NativePlayer
               autoplay={autoplay}
               url={embeds[0].url}
@@ -79,14 +126,6 @@ const Player = ({ messages }) => {
               length={messages.length}
             />
           )}
-        {embeds.length > 0 && embeds[0].url.startsWith('https://i.nuuls.com/') && (
-          <NativePlayer
-            autoplay={autoplay}
-            url={embeds[0].url}
-            key={messages[index].id}
-            length={messages.length}
-          />
-        )}
         {embeds.length > 0 && embeds[0]?.provider?.name === 'Imgur' && (
           <NativePlayer
             autoplay={autoplay}
@@ -96,87 +135,65 @@ const Player = ({ messages }) => {
           />
         )}
         {embeds.length > 0 && embeds[0]?.provider?.name === 'Streamable' && (
-          <StreamablePlayer url={embeds[0].url} />
-        )}
-        {embeds.length > 0 && embeds[0]?.provider?.name === 'Twitch' && (
-          <TwitchPlayer url={embeds[0].video.url} />
-        )}
-        {embeds.length > 0 && embeds[0]?.provider?.name === 'TikTok' && (
-          <TiktokPlayer url={embeds[0].url} />
-        )}
-        {embeds.length > 0 && embeds[0]?.provider?.name === 'YouTube' && (
-          <YoutubePlayer url={embeds[0].video.url} />
-        )}
-        {embeds.length > 0 && embeds[0]?.provider?.name === 'Tenor' && (
-          <NativePlayer
-            autoplay={autoplay}
-            url={embeds[0].video.url}
+          <StreamablePlayer
+            changeMedia={changeMedia}
+            url={embeds[0].url}
             key={messages[index].id}
-            length={messages.length}
           />
         )}
-        <BottomPlayer>
-          <Description>
-            <Title>
-              {embeds.length > 0 && embeds[0].title
-                ? embeds[0].title
-                : embeds.length > 0
-                ? 'Untitled'
-                : ''}
-              {attachments.length > 0 && attachments[0].filename}
-            </Title>
-            <Request>
-              requested by {messages[index].author.username} on{' '}
-              {formatDate(messages[index].timestamp)}
-            </Request>
-          </Description>
-          <Controls>
-            <Tooltip
-              label='Autoplay is currently working only for native player'
-              multiline
-              color='red'
-              withArrow
-              transitionProps={{ transition: 'pop', duration: 300 }}
-            >
-              <IconHelpCircleFilled />
-            </Tooltip>
-            <Switch
-              label='Autoplay'
-              labelPosition='left'
-              size='md'
-              style={{ cursor: 'pointer' }}
-              defaultChecked={autoplay}
-              onChange={() => {
-                setAutoplay((prev) => {
-                  localStorage.setItem('autoplay', !prev);
-                  return !prev;
-                });
-              }}
+        {embeds.length > 0 && embeds[0]?.provider?.name === 'Twitch' && (
+          <TwitchPlayer key={messages[index].id} url={embeds[0].video.url} autoplay={autoplay} />
+        )}
+        {embeds.length > 0 && embeds[0]?.provider?.name === 'TikTok' && (
+          <TiktokPlayer key={messages[index].id} url={embeds[0].url} length={messages.length} />
+        )}
+        {embeds.length > 0 && embeds[0]?.provider?.name === 'YouTube' && (
+          <ReactPlayerWrapper>
+            <ReactPlayer
+              key={messages[index].id}
+              width='100%'
+              height='100%'
+              url={embeds[0].url}
+              onEnded={() => autoplay && changeMedia('forward')}
+              style={{ position: 'absolute', top: 0, left: 0 }}
+              playing={true}
+              controls={true}
+              volume={+localStorage.getItem('volume') || 1}
             />
-            <ActionIcon
-              disabled={index === 0}
-              variant='filled'
-              color='#1971c2'
-              size='xl'
-              radius='xl'
-              onClick={() => changeMedia('back')}
-            >
-              <IconPlayerSkipBackFilled />
-            </ActionIcon>
-            <ActionIcon
-              disabled={index === messages.length - 1}
-              variant='filled'
-              color='#1971c2'
-              size='xl'
-              radius='xl'
-              onClick={() => changeMedia('forward')}
-            >
-              <IconPlayerSkipForwardFilled />
-            </ActionIcon>
-          </Controls>
-        </BottomPlayer>
+          </ReactPlayerWrapper>
+        )}
+
+        {/* controls */}
+        <Controls
+          messages={messages}
+          index={index}
+          autoplay={autoplay}
+          changeMedia={changeMedia}
+          setAutoplay={setAutoplay}
+          open={open}
+          queueVisible={queueVisible}
+        />
       </VideoContainer>
-      <Queue messages={messages} />
+
+      {/* collapse queue button */}
+      <ActionIcon
+        variant='subtle'
+        radius='xl'
+        size='xl'
+        onClick={() => setQueueVisible((prev) => !prev)}
+        aria-label='Collapse queue'
+        style={{
+          position: 'absolute',
+          right: '1rem',
+          top: '1rem',
+          zIndex: 5,
+        }}
+      >
+        {queueVisible ? <IconLayoutSidebarRightCollapse /> : <IconLayoutSidebarLeftCollapse />}
+      </ActionIcon>
+
+      {/* queue */}
+      <Queue messages={messages} queueVisible={queueVisible} />
     </Wrapper>
   );
 };
@@ -187,38 +204,27 @@ const Wrapper = styled.div`
   width: 100%;
   height: 100%;
   display: flex;
+  position: relative;
 `;
 const VideoContainer = styled.div`
-  width: 100%;
   display: flex;
   flex-direction: column;
-`;
-const BottomPlayer = styled.div`
-  display: flex;
-  align-items: center;
-  padding: 2rem;
-  font-weight: bold;
-  font-size: 1.25rem;
-  justify-content: space-between;
+  width: ${({ $queueVisible }) => ($queueVisible ? 'calc(100% - 27rem)' : 'calc(100% - 9.75rem)')};
 `;
 
-const Controls = styled.div`
-  display: flex;
-  gap: 1rem;
-  align-items: center;
+const ReactPlayerWrapper = styled.div`
+  position: relative;
+  flex: 1;
 `;
-const Description = styled.div`
+
+const ModalContentWrapper = styled.div`
   display: flex;
   flex-direction: column;
+  gap: 2rem;
 `;
-const Title = styled.div`
-  overflow: hidden;
-  display: -webkit-box;
-  -webkit-line-clamp: 1;
-  -webkit-box-orient: vertical;
-`;
-const Request = styled.div`
-  font-size: 0.75rem;
-  color: #6a6f76;
-  font-weight: 600;
+
+const LeaveChannelWrapper = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
 `;
